@@ -1,0 +1,358 @@
+{
+    "nodes": [
+        {
+            "hostname": "master-node-01",
+            "role": "master",
+            "ipaddress": "192.168.29.129"
+        },
+        {
+            "hostname": "kube-worker-node-02",
+            "role": "worker",
+            "ipaddress": "192.168.29.130"
+        }
+    ],
+    "commands": {
+        "get_su": [
+            {
+                "order": 0,
+                "enabled": true,
+                "command": "echo '{0}'|sudo -S su -"
+            }
+        ],
+        "install_docker": [
+            {
+                "order": 0,
+                "enabled": true,
+                "command": "sudo apt update --fix-missing -y"
+            },
+            {
+                "order": 1,
+                "enabled": true,
+                "command": "sudo apt install -y curl gnupg2 software-properties-common apt-transport-https ca-certificates"
+            },{
+                "order": 2,
+                "enabled": true,
+                "command": "sudo curl -fskSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmour -o /etc/apt/trusted.gpg.d/docker.gpg"
+            },{
+                "order": 3,
+                "enabled": true,
+                "command": "sudo add-apt-repository \"deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable -y\""
+            }, {
+                "order": 4,
+                "enabled": true,
+                "command": "sudo apt install docker.io -y"
+            },
+            {
+                "order": 5,
+                "enabled": true,
+                "command": "sudo systemctl enable docker"
+            },
+            {
+                "order": 6,
+                "enabled": true,
+                "command": "sudo systemctl start docker"
+            },
+            {
+                "order": 7,
+                "enabled": true,
+                "command": "sudo systemctl --no-pager status docker"
+            },
+            {
+                "order": 8,
+                "enabled": true,
+                "command": "sudo apt install -y containerd"
+            },
+            {
+                "order": 9,
+                "enabled": true,
+                "command": "sudo mkdir -p /etc/containerd"
+            },
+            {
+                "order": 10,
+                "enabled": true,
+                "command": "sudo containerd config default | sudo tee /etc/containerd/config.toml >/dev/null 2>&1"
+            },
+            {
+                "order": 11,
+                "enabled": true,
+                "command": "sudo sed -i 's/SystemdCgroup \\= false/SystemdCgroup \\= true/g' /etc/containerd/config.toml"
+            },
+            {
+                "order": 12,
+                "enabled": true,
+                "command": "sudo systemctl restart containerd"
+            },
+            {
+                "order": 13,
+                "enabled": true,
+                "command": "sudo systemctl enable containerd"
+            }
+        ],
+        "add_kube_repo_key": [
+            {
+                "order": 0,
+                "enabled": true,
+                "command": "sudo mkdir -p /etc/apt/keyrings/"
+            },
+            {
+                "order": 1,
+                "enabled": true,
+                "command": "sudo apt-get install -y apt-transport-https ca-certificates curl gnupg"
+            },
+            {
+                "order": 2,
+                "enabled": true,
+                "command": "sudo rm -f /etc/apt/keyrings/kubernetes-apt-keyring.gpg && sudo curl -fskSL https://pkgs.k8s.io/core:/stable:/v1.31/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg"
+            },
+            {
+                "order": 3,
+                "enabled": true,
+                "command": "sudo chmod 644 /etc/apt/keyrings/kubernetes-apt-keyring.gpg"
+            }
+        ],
+        "add_kube_repo": [
+            {
+                "order": 0,
+                "enabled": true,
+                "command": "sudo bash -c \"echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.31/deb/ /' | sudo tee /etc/apt/sources.list.d/kubernetes.list\""
+            },
+            {
+                "order": 1,
+                "enabled": true,
+                "command": "sudo chmod 644 /etc/apt/sources.list.d/kubernetes.list"
+            },
+            {
+                "order": 2,
+                "enabled": true,
+                "command": "sudo apt update -y"
+            },
+            {
+                "order": 3,
+                "enabled": true,
+                "command": "sudo apt upgrade -y"
+            },
+            {
+                "order": 4,
+                "enabled": true,
+                "command": "sudo timedatectl set-ntp on "
+            },
+            {
+                "order": 5,
+                "enabled": true,
+                "command": "sudo timedatectl set-timezone 'Canada/Atlantic'"
+            }
+        ],
+        "install_kube_tools": [
+            {
+                "order": 0,
+                "enabled": true,
+                "command": "sudo apt install kubeadm kubelet kubectl -y"
+            },
+            {
+                "order": 1,
+                "enabled": true,
+                "command": "sudo apt-mark hold kubeadm kubelet kubectl"
+            },
+            {
+                "order": 2,
+                "enabled": true,
+                "command": "kubeadm version"
+            }
+        ],
+        "prepare_for_kube_deployment": [
+            {
+                "order": 0,
+                "enabled": true,
+                "command": "sudo swapoff -a"
+            },
+            {
+                "order": 1,
+                "enabled": true,
+                "command": "sudo sed -i '/ swap / s/^\\(.*\\)$/#\\1/g' /etc/fstab"
+            },
+            {
+                "order": 2,
+                "enabled": true,
+                "command": "sudo bash -c \"echo -e 'overlay\nbr_netfilter' >> /etc/modules-load.d/containerd.conf\""
+            },
+            {
+                "order": 3,
+                "enabled": true,
+                "command": "sudo modprobe overlay"
+            },
+            {
+                "order": 4,
+                "enabled": true,
+                "command": "sudo modprobe br_netfilter"
+            },
+            {
+                "order": 5,
+                "enabled": true,
+                "command": "sudo bash -c \"echo -e 'net.bridge.bridge-nf-call-ip6tables = 1\nnet.bridge.bridge-nf-call-iptables = 1\nnet.ipv4.ip_forward = 1' >> /etc/sysctl.d/kubernetes.conf\""
+            },
+            {
+                "order": 6,
+                "enabled": true,
+                "command": "sudo sysctl --system"
+            }
+        ],
+        "assign_hostnames": [
+            {
+                "order": 0,
+                "enabled": true,
+                "command": "sudo hostnamectl set-hostname {0}"
+            },
+            {
+                "order": 1,
+                "enabled": true,
+                "command": "sudo bash -c  \"echo -e '{0}' >> /etc/hosts\""
+            }
+        ],
+        "initialize_kube_master_01": [
+            {
+                "order": 0,
+                "enabled": true,
+                "command": "sudo bash -c  \" echo 'KUBELET_EXTRA_ARGS=\\\"--cgroup-driver=systemd\\\"' >  /etc/default/kubelet\""
+            },
+            {
+                "order": 1,
+                "enabled": true,
+                "command": "sudo systemctl daemon-reload && sudo systemctl restart kubelet"
+            },
+            {
+                "order": 2,
+                "enabled": true,
+                "command": "sudo bash -c  \" echo -e '{\n\\\"exec-opts\\\": [\\\"native.cgroupdriver=systemd\\\"],\n\\\"log-driver\\\": \\\"json-file\\\",\n\\\"log-opts\\\": {\\\"max-size\\\": \\\"100m\\\"},\n\\\"storage-driver\\\": \\\"overlay2\\\"}' >>/etc/docker/daemon.json\""
+            },
+            {
+                "order": 3,
+                "enabled": true,
+                "command": "sudo systemctl daemon-reload && sudo systemctl restart docker"
+            }
+        ],
+        "initialize_kube_master_02": [
+            {
+                "order": 0,
+                "enabled": true,
+                "command": "sudo mkdir -p /etc/systemd/system/kubelet.service.d"
+            },
+            {
+                "order": 1,
+                "enabled": true,
+                "command": "sudo bash -c \"echo -e '[Service]\nEnvironment=\\\"KUBELET_EXTRA_ARGS=--fail-swap-on=false\\\"' >/etc/systemd/system/kubelet.service.d/10-kubeadm.conf\""
+            },
+            {
+                "order": 2,
+                "enabled": true,
+                "command": "sudo systemctl daemon-reload && sudo systemctl restart kubelet"
+            }
+        ],
+        "initialize_kube_master_03": [
+            {
+                "order": 0,
+                "enabled": true,
+                "command": "sudo kubeadm init --control-plane-endpoint={0} --apiserver-advertise-address={1} --upload-certs | tee /tmp/kubeadm_init.txt"
+            }
+        ],
+        "initialize_kube_master_03_a": [
+            {
+                "order": 0,
+                "enabled": true,
+                "command": "cat /tmp/kubeadm_init.txt"
+            }
+        ],
+        "initialize_kube_master_04": [
+            {
+                "order": 1,
+                "enabled": true,
+                "command": "mkdir -p $HOME/.kube"
+            },
+            {
+                "order": 2,
+                "enabled": true,
+                "command": "sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config"
+            },
+            {
+                "order": 3,
+                "enabled": true,
+                "command": "sudo chown $(id -u):$(id -g) $HOME/.kube/config"
+            }
+        ],
+        "deploy_flannel_network_to_master": [
+            {
+                "order": 0,
+                "enabled": true,
+                "command": "kubectl apply -f https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml"
+            },
+            {
+                "order": 1,
+                "enabled": true,
+                "command": "kubectl taint nodes --all node-role.kubernetes.io/control-plane-"
+            }
+        ],
+        "add_node_to_cluster": [
+            {
+                "order": 0,
+                "enabled": true,
+                "command": "sudo systemctl stop apparmor && sudo systemctl disable apparmor"
+            },
+            {
+                "order": 1,
+                "enabled": true,
+                "command": "sudo systemctl restart containerd.service"
+            }
+        ],
+        "get_admin_config": [
+            {
+                "order": 0,
+                "enabled": true,
+                "command": "sudo cat /etc/kubernetes/admin.conf"
+            }
+        ],
+        "drain_node": [
+            {
+                "order": 0,
+                "enabled": true,
+                "command": "kubectl drain --ignore-daemonsets {0}"
+            },
+            {
+                "order": 1,
+                "enabled": true,
+                "command": "kubectl cordon {0}"
+            }
+        ],
+        "delete_node": [
+            {
+                "order": 0,
+                "enabled": true,
+                "command": "kubectl delete node {0}"
+            }
+        ],
+        "flannel_network_config": [
+            {
+                "order": 0,
+                "enabled": true,
+                "command": "sudo bash -c \"echo -e 'FLANNEL_NETWORK=10.212.0.0/16\nFLANNEL_SUBNET=10.212.0.1/24\nFLANNEL_MTU=1450\nFLANNEL_IPMASQ=true' >/tmp/subnet.env\""
+            },
+            {
+                "order": 1,
+                "enabled": true,
+                "command": "sudo bash -c  'cp -f /tmp/subnet.env /run/flannel/'"
+            }
+        ],
+        "kube_token_generate": [
+            {
+                "order": 0,
+                "enabled": true,
+                "command": "sudo kubeadm token generate"
+            }
+        ],
+        "kube_cert_key_generate": [
+            {
+                "order": 0,
+                "enabled": true,
+                "command": "sudo kubeadm init phase upload-certs --upload-certs"
+            }
+        ]
+    }
+}
