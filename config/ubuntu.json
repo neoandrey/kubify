@@ -28,16 +28,19 @@
             {
                 "order": 1,
                 "enabled": true,
-                "command": "sudo apt install -y curl gnupg2 software-properties-common apt-transport-https ca-certificates"
-            },{
+                "command": "sudo apt-get install -y curl gnupg2 software-properties-common apt-transport-https ca-certificates"
+            },
+            {
                 "order": 2,
                 "enabled": true,
-                "command": "sudo curl -fskSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmour -o /etc/apt/trusted.gpg.d/docker.gpg"
-            },{
+                "command": "sudo rm -f /etc/apt/trusted.gpg.d/docker.gpg && sudo curl -fskSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmour -o /etc/apt/trusted.gpg.d/docker.gpg && sudo chmod 755 /etc/apt/trusted.gpg.d/ && sudo chmod a+r /etc/apt/trusted.gpg.d/docker.gpg"
+            },
+            {
                 "order": 3,
                 "enabled": true,
                 "command": "sudo add-apt-repository \"deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable -y\""
-            }, {
+            },
+            {
                 "order": 4,
                 "enabled": true,
                 "command": "sudo apt install docker.io -y"
@@ -97,15 +100,10 @@
             {
                 "order": 1,
                 "enabled": true,
-                "command": "sudo apt-get install -y apt-transport-https ca-certificates curl gnupg"
-            },
-            {
-                "order": 2,
-                "enabled": true,
                 "command": "sudo rm -f /etc/apt/keyrings/kubernetes-apt-keyring.gpg && sudo curl -fskSL https://pkgs.k8s.io/core:/stable:/v1.31/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg"
             },
             {
-                "order": 3,
+                "order": 2,
                 "enabled": true,
                 "command": "sudo chmod 644 /etc/apt/keyrings/kubernetes-apt-keyring.gpg"
             }
@@ -263,17 +261,17 @@
         ],
         "initialize_kube_master_04": [
             {
-                "order": 1,
+                "order": 0,
                 "enabled": true,
                 "command": "mkdir -p $HOME/.kube"
             },
             {
-                "order": 2,
+                "order": 1,
                 "enabled": true,
                 "command": "sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config"
             },
             {
-                "order": 3,
+                "order": 2,
                 "enabled": true,
                 "command": "sudo chown $(id -u):$(id -g) $HOME/.kube/config"
             }

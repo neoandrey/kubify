@@ -1,4 +1,7 @@
-﻿function  run-SshCommandStream{
+﻿
+
+
+function  run-SshCommandStream{
 <#======================================================================================->
 #
 #  Executes commands on remote nodes via ssh connections
@@ -260,7 +263,7 @@ function get-accessMap{
      $nodeMap = @{}
      foreach($node in $nodes){
 
-            $ip           = $node.ipaddress
+            $ip      = $node.ipaddress
             $credentials  =  get-cred  $ip;
             if($credentials -ne $null){
                 $username     =  $credentials.username
@@ -305,14 +308,12 @@ function log-results{
 #
 <-=======================================================================================#>
     param(
-    [Parameter(Mandatory=$true)][system.object]$nodeIP
+    [Parameter(Mandatory=$true)][system.object]$logFile
     ,[Parameter(Mandatory=$true)][system.object]$results
     )
-    $logDate = get-date -format "yyyyMMdd_hh0000";
-    $logFile = "$PSScriptRoot\logs\$($nodeIP)_$($logDate).json";
      $jsonResults = $results | convertto-json 
     if($results){ 
-       Add-Content -Path  $logFile -Value $jsonResults -Encoding Unicode
+       Add-Content -Path  $logFile -Value $jsonResults 
     }
     
 

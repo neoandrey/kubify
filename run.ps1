@@ -21,7 +21,9 @@ $scriptRoot    = $scriptRoot[0..($scriptRoot.Length-1)] -join ''
 $poshSsh       = get-installedmodule -name posh-ssh;
 $credentialMap = @{};
 
-
+$logFileMap = @{}
+$logDate = get-date -format "yyyyMMdd_hhmmss";
+write-host "Log file suffix: $logDate"
 $etcResolv     = @'
 sudo cat >/tmp/resolv.conf <<- EOD
 #This is /run/systemd/resolve/stub-resolv.conf managed by man:systemd-resolved(8).
@@ -70,11 +72,13 @@ function run-CommandsOnNode{
   [Parameter(Mandatory=$true)][system.object]$nodeIP
   ,[Parameter(Mandatory=$true)][system.object]$scriptRoot
   ,[Parameter(Mandatory=$true)][system.object]$commandList
+  ,[Parameter(Mandatory=$true)][system.object]$logFile
   )
              Import-Module -PassThru  "$($scriptRoot)\install_tools.ps1" -Force
 
             $results = process-commands $nodeIP $commandList
-            log-results $nodeIP $results
+            write-host  "logging to $logFile"
+            log-results $logFile $results
             $isSuccessful = process-results $results
             if(-not $isSuccessful){
                 break;
@@ -135,7 +139,7 @@ function install-commontools{
             $hostFileString = get-hostfileString $nodes
             $cmdArgs =  @($node.hostname, $hostFileString )
             $commandList += get-commands $commands.assign_hostnames $cmdArgs
-            $job   = start-job  -scriptblock ${Function:run-CommandsOnNode}  -ArgumentList $nodeIP,$scriptRoot,$commandList
+            $job   = start-job  -scriptblock ${Function:run-CommandsOnNode}  -ArgumentList $nodeIP,$scriptRoot,$commandList,$logFileMap[$nodeIP]
 
             [void] $jobList.Add([pscustomobject]@{
                       node = $nodeIP;
@@ -197,7 +201,7 @@ function initialize-ControlPlane{
 <-=======================================================================================================#>
 
         param(
-         [Parameter(Mandatory=$true)][system.object]$allMasterNodes
+        [Parameter(Mandatory=$true)][system.object]$allMasterNodes
         ,[Parameter(Mandatory=$true)][system.object]$nodeAccessMap
         ,[Parameter(Mandatory=$true)][system.object]$commands
         )
@@ -222,7 +226,7 @@ function initialize-ControlPlane{
                  $commandList += $reset_resolv_conf
                 }
                 $commandList += get-commands $commands.initialize_kube_master_01
-                $job   = start-job  -scriptblock ${Function:run-CommandsOnNode}  -ArgumentList $nodeIP,$scriptRoot,$commandList
+                $job   = start-job  -scriptblock ${Function:run-CommandsOnNode}  -ArgumentList $nodeIP,$scriptRoot,$commandList,$logFileMap[$nodeIP]
                 [void] $jobList.Add([pscustomobject]@{
                                     node = $nodeIP;
                                     job_id = $job.id
@@ -288,14 +292,12 @@ function initialize-ControlPlane{
                 
                     $commandList =  @()
                     $credentials =  get-cred $node.ipaddress
-                    write-host "Checking node information"
-                    write-host $node
                     $commandList += $commands.get_su.command -f $credentials.password
                     if($customResolve -eq $True){ 
                             $commandList += $reset_resolv_conf
                     }
                 $commandList += get-commands $commands.initialize_kube_master_02
-                $job   = start-job  -scriptblock ${Function:run-CommandsOnNode}  -ArgumentList $node.ipaddress,$scriptRoot,$commandList
+                $job   = start-job  -scriptblock ${Function:run-CommandsOnNode}  -ArgumentList $node.ipaddress,$scriptRoot,$commandList,$logFileMap[$nodeIP]
                 [void] $jobList.Add([pscustomobject]@{
                                     node = $nodeIP;
                                     job_id = $job.id
@@ -357,18 +359,18 @@ function initialize-ControlPlane{
                 $node = $allMasterNodes|?{$_.ipaddress -eq $nodeIP}
                 if($null -ne $node){
                     
-                    write-host "NodeIP: $nodeIP"
+             
                     $commandList =  @()
                     $credentials =  get-cred $nodeIP
                     $commandList += $commands.get_su.command -f $credentials.password
                     if($customResolve -eq $True){ 
                         $commandList += $reset_resolv_conf
                     }
-                    if($nodeIP -eq $masterNode -or $masterNode -eq $node.hostname){
+                    if($nodeIP -eq $mainMasterNode -or $mainMasterNode -eq $node.hostname){
                             $commandList += get-commands $commands.initialize_kube_master_03 @(@($nodeIP,$nodeIP),"")  #  @($nodeIP) The extra element is requirement for the arguments to be treated like an array
                     }
                 
-                    $job   = start-job  -scriptblock ${Function:run-CommandsOnNode}  -ArgumentList $nodeIP,$scriptRoot,$commandList
+                    $job   = start-job  -scriptblock ${Function:run-CommandsOnNode}  -ArgumentList $nodeIP,$scriptRoot,$commandList,$logFileMap[$nodeIP]
                     [void] $jobList.Add([pscustomobject]@{
                                         node = $nodeIP;
                                         job_id = $job.id
@@ -528,7 +530,7 @@ function Add-NodesToCluster{
                         $commandList += "sudo systemctl enable apparmor && sudo systemctl start apparmor"
 
                            
-                        $job   = start-job  -scriptblock ${Function:run-CommandsOnNode}  -ArgumentList $nodeIP,$scriptRoot,$commandList
+                        $job   = start-job  -scriptblock ${Function:run-CommandsOnNode}  -ArgumentList $nodeIP,$scriptRoot,$commandList,$logFileMap[$nodeIP]
 
                         [void] $jobList.Add([pscustomobject]@{
                                   node = $nodeIP;
@@ -659,7 +661,11 @@ function install-NewNodes{
         $commands        = $config.commands
         $nodeAccessMap   = get-accessMap $nodes
         $mainMaster      = $nodes|?{($_.ipaddress -eq $masterNode) -or ($_.hostname -eq $masterNode) }
-
+        $nodeAccessMap.keys|%{
+            $ip = $_
+            $logFile = "$PSScriptRoot\logs\$($ip)_$($logDate).json"
+            $logFileMap[$ip] =  $logFile 
+        }
         if(-not [string]::IsNullOrEmpty($masterNode) -and $null -ne   $mainMaster ) {
 
 		    $nonMasterNodes = $nodes|?{($_.ipaddress -ne $masterNode) -and ($_.hostname -ne $masterNode) }
@@ -745,13 +751,18 @@ function remove-Nodes{
 		)
    
     $config = load-configuration $configPath;
+
      
     if($config -ne $null){ 
      if(-not [string]::IsNullOrEmpty($masterNode)) {
         $nodes           = $config.nodes
         $commands        = $config.commands
         $nodeAccessMap   = get-accessMap $nodes
-
+         $nodeAccessMap.keys|%{
+            $ip = $_
+            $logFile = "$PSScriptRoot\logs\$($ip)_$($logDate).json"
+            $logFileMap[$ip] =  $logFile 
+        }
 		$nonMasterNodes = $nodes|?{($_.ipaddress -ne $masterNode) -and ($_.hostname -ne $masterNode) }
 		$mainMaster      = $nodes|?{($_.ipaddress -eq $masterNode) -or ($_.hostname -eq $masterNode) }
         $pendingNodesMap = @{}
@@ -850,6 +861,11 @@ function install-newCluster {
         $nodes           = $config.nodes
         $commands        = $config.commands
         $nodeAccessMap   = get-accessMap $nodes
+        $nodeAccessMap.keys|%{
+            $ip = $_
+            $logFile = "$PSScriptRoot\logs\$($ip)_$($logDate).json"
+            $logFileMap[$ip] =  $logFile 
+        }
         install-commontools $nodeAccessMap $commands
         $allMasterNodes   = $nodes|?{$_.role -eq 'master'}
         $mainMaster       = $allMasterNodes[0]
