@@ -28,6 +28,7 @@ Param
     ,[Parameter(mandatory=$False)][string]$mainMasterNode=$null
     ,[Parameter(Mandatory=$false)][string]$configPath=$null
     ,[Parameter(Mandatory=$false)][bool]$customResolve=$false
+    ,[Parameter(Mandatory=$false)][bool]$newToken=$false
 )
 
 $scriptRoot    = $MyInvocation.MyCommand.Path # $PSScriptRoot
@@ -662,7 +663,7 @@ function Add-NodesToCluster{
                      
                         $response = run-SshCommandStream  $nodeIP  $credentials.username  $credentials.password $commandList;
                         $result  = $response[($response.length -1)]
-                        $response
+                        
                             
                      }
                  }
@@ -752,7 +753,7 @@ function install-NewNodes{
         }
 
         
-		Add-NodesToCluster $masterNode $nonMasterNodes $pendingNodesMap $commands  $true
+		Add-NodesToCluster $masterNode $nonMasterNodes $pendingNodesMap $commands $newToken
 
       }else{
           if(-not [string]::isNullOrEmpty($masterNode)){
