@@ -335,7 +335,7 @@ function get-commands{
     $index   = 0
     $commandInfo|Sort-Object -Property 'order'|%{
     if($_.enabled -eq $true){
-       if (-not [string]::IsNullOrEmpty($cmdArgs) -and $cmdArgs.Length -gt $index){
+       if (-not [string]::IsNullOrWhiteSpace($cmdArgs) -and $cmdArgs.Length -gt $index){
             $cmdList+=$_.command -f $cmdArgs[$index];
 
        }else{

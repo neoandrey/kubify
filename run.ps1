@@ -1,11 +1,27 @@
-﻿## https://phoenixnap.com/kb/install-kubernetes-on-ubuntu
-## https://medium.com/@sethiabinash123/latest-step-by-step-guide-on-installing-kubernetes-cluster-on-ubuntu-22-04-07c596a9a04f
-## Run the following on new installations of Ubuntu22.04 for ssh access and curl commands
-## Read more here: https://locall.host/powershell-is-multithreaded-a-comprehensive-guide/
-
-## sudo apt install openssh-server -y
-## sudo apt install curl -y
-## 
+﻿<# 
+ # Sources:
+ #   - https://phoenixnap.com/kb/install-kubernetes-on-ubuntu
+ #   - https://medium.com/@sethiabinash123/latest-step-by-step-guide-on-installing-kubernetes-cluster-on-ubuntu-22-04-07c596a9a04f
+ #   - Read more here: https://locall.host/powershell-is-multithreaded-a-comprehensive-guide/
+ #
+ # Dependecies
+ #   - Windows Workstation: 
+ #      - NetworK Connectivity
+ #      - Execution Policy
+ #      - Posh SSH
+ #
+ #   - Kube Nodes
+ #      - Ubuntu22.04
+ #      - NetworK Connectivity
+ #      - openssh-server (sudo apt install openssh-server -y)
+ #      - curl (sudo apt install curl -y)
+ #
+ # Challenges: 
+ #   - Timeout Waiting for API Server -  Resolved by deleting /etc/systemd/system/kubelet.service.d/10-kubeadm.conf before running kubeadm int
+ #     sudo rm -rf /etc/systemd/system/kubelet.service.d/10-kubeadm.conf 
+ #     (https://github.com/kubernetes/kubernetes/issues/125275)
+ #
+ #>
 Param
 (
      [Parameter(Mandatory=$true)][ValidateSet("install", "add", "remove", "masters")] [String] $mode
@@ -23,7 +39,11 @@ $credentialMap = @{};
 
 $logFileMap = @{}
 $logDate = get-date -format "yyyyMMdd_hhmmss";
-write-host "Log file suffix: $logDate"
+write-host "Log file suffix: $logDate";
+
+$resolvConfPath = "$($scriptRoot)config\resolv.conf"
+$resolvContents = "";
+
 $etcResolv     = @'
 sudo cat >/tmp/resolv.conf <<- EOD
 #This is /run/systemd/resolve/stub-resolv.conf managed by man:systemd-resolved(8).
@@ -45,14 +65,21 @@ sudo cat >/tmp/resolv.conf <<- EOD
 #
 # See man:systemd-resolved.service(8) for details about the supported modes of
 # operation for /etc/resolv.conf.
-
-namserver 127.0.0.1
 namserver 8.8.8.8
 nameserver 8.8.4.4
 #options edns0 trust-ad
 search .
 EOD
 '@
+
+if ((test-path -path $resolvConfPath) -eq $true){
+    $resolvContents = (get-content -path  $resolvConfPath)  -join "`n";
+    if(-not [string]::IsNullOrEmpty($resolvContents )){
+    $etcResolv     = @"
+$($resolvContents)
+"@ 
+    }
+}
 
 $reset_resolv_conf = "sudo cp -f /tmp/resolv.conf /etc/"
 
@@ -367,7 +394,7 @@ function initialize-ControlPlane{
                         $commandList += $reset_resolv_conf
                     }
                     if($nodeIP -eq $mainMasterNode -or $mainMasterNode -eq $node.hostname){
-                            $commandList += get-commands $commands.initialize_kube_master_03 @(@($nodeIP,$nodeIP),"")  #  @($nodeIP) The extra element is requirement for the arguments to be treated like an array
+                            $commandList += get-commands $commands.initialize_kube_master_03 @("",@($nodeIP,$nodeIP))  #  @($nodeIP) The extra element is requirement for the arguments to be treated like an array
                     }
                 
                     $job   = start-job  -scriptblock ${Function:run-CommandsOnNode}  -ArgumentList $nodeIP,$scriptRoot,$commandList,$logFileMap[$nodeIP]
@@ -437,6 +464,7 @@ function Add-NodesToCluster{
             ,[Parameter(Mandatory=$true)][system.object]$nodes
             ,[Parameter(Mandatory=$true)][system.object]$nodeAccessMap
             ,[Parameter(Mandatory=$true)][system.object]$commands
+            ,[Parameter(Mandatory=$False)][system.object]$newToken=$False
          )
 
        $configPath =  "$($scriptRoot)config\control_planes\$($masterIP)\cluster_config_commands.json"
@@ -460,19 +488,26 @@ function Add-NodesToCluster{
                 $commandList += $reset_resolv_conf
             }
             $commandList +=  get-commands $commands.kube_token_generate
-            $result = @{}       
-            $response = run-SshCommandStream $masterIP $credentials.username  $credentials.password $commandList;
-            $result  = $response[($response.length -1)]
-            $token = ($result.response -split('\n'))[1]
+            $result = @{} 
+            $token  = $Null    
+            if($newToken){  
+                $response = run-SshCommandStream $masterIP $credentials.username  $credentials.password $commandList;
+                $result  = $response[($response.length -1)]
+                $token = ($result.response -split('\n'))[1]
+            }
 
 
             $comps = $masterCommands.add_master_node -split '\s'
-            $comps[4] = $token
+             if($newToken){  
+                $comps[4] = $token
+            }
             $addMasterNode = $comps -join ' '
 
 
             $comps = $masterCommands.add_worker_node -split '\s'
-            $comps[4] = $token
+             if($newToken){ 
+                $comps[4] = $token
+            }
             $addWorkerNode = $comps -join ' '
 
             $newMasterNodes = $nodes|?{$_.role -eq 'master'}
@@ -717,7 +752,7 @@ function install-NewNodes{
         }
 
         
-		Add-NodesToCluster $masterNode $nonMasterNodes $pendingNodesMap $commands  
+		Add-NodesToCluster $masterNode $nonMasterNodes $pendingNodesMap $commands  $true
 
       }else{
           if(-not [string]::isNullOrEmpty($masterNode)){
@@ -878,26 +913,25 @@ function install-newCluster {
         $result = @{flag=1}       
         while($null -ne $result -and $result.flag -ne 0){
             $response = run-SshCommandStream  $mainMaster.ipaddress  $credentials.username  $credentials.password $commandList;
-            $result  = $response[2]
-            start-sleep -Seconds  2
+            $result  = $response[1]
+            start-sleep -Seconds  1
         }
         $kubeAdminInitResults =   $result.response
-        $lines= ($kubeAdminInitResults.trim() -split '\n')
-   
+        $lines= ($kubeAdminInitResults.trim() -split '\n') 
         $AddWorkerNodeCMD = ("{0}{1}"  -f  $lines[-3],$lines[-2]).replace('\','')
         $lines[-7] -match '".*"'
-        $reloadCertsCMD=($Matches.0).replace('"',"")
+        $reloadCertsCMD=($Matches[0]).replace('"',"")
         $AddMasterNodeCMD = ("{0}{1}{2}"  -f  $lines[-13],$lines[-12],$lines[-11]).replace('\','')
         $netWorkOptionsURL = $lines[-17]
         $lines[-18] -match '".*"'
-        $deployPodNetworkCMD=($Matches.0).replace('"',"")
+        $deployPodNetworkCMD=($Matches[0]).replace('"',"")
 
         $commandList =  @()
         $credentials =  get-cred $mainMaster.ipaddress
         $commandList += $commands.get_su.command -f $credentials.password
         $commandList += get-commands $commands.get_admin_config
         $response    =  run-SshCommandStream  $mainMaster.ipaddress  $credentials.username  $credentials.password $commandList;
-        $adminConf   =  $response[2].response  
+        $adminConf   =  $response[1].response  
         $adminConf   =  $adminConf.replace( $commands.get_admin_config.command,'').trim().split("`n")
         $adminConf   =  $adminConf[0..($adminConf.Length-2)] -join "`n"
      
@@ -935,7 +969,7 @@ function install-newCluster {
             $pendingNodesMap[$node.ipaddress] = $nodeAccessMap[$node.ipaddress]
         }
    
-        Add-NodesToCluster $masterIP $allOtherNodes $pendingNodesMap $commands          
+        Add-NodesToCluster $masterIP $allOtherNodes $pendingNodesMap $commands $false         
 
      } else{
    
@@ -949,17 +983,22 @@ function install-newCluster {
 
 switch ($mode)
 {
-	"install" { install-newCluster }
+	"install" {
+               install-newCluster 
+               
+              }
 
     "add" { 
     
-            if(-not [string]::IsNullOrEmpty($mainMasterNode) -and -not [string]::IsNullOrEmpty($configPath) ){
+            if(-not [string]::IsNullOrEmpty($mainMasterNode)){
+            if( -not [string]::IsNullOrEmpty($configPath)){
                 Write-host -f green "NOTE: This will add all nodes apart from the master node in the specified configuration file to the cluster"
-                install-NewNodes $mainMasterNode $configPath
+                install-NewNodes -masterNode $mainMasterNode  -configPath $configPath
          }elseif(-not [string]::IsNullOrEmpty($mainMasterNode) -and  [string]::IsNullOrEmpty($configPath) ){
                 Write-host -f green "NOTE: This will add all nodes apart from the master node in the default configuration file to the cluster"
-                install-NewNodes $mainMasterNode
-         }else{
+                install-NewNodes -masterNode $mainMasterNode
+         }
+        }else{
                  Write-host -f red "Please provide a master node "
          }
             
@@ -980,12 +1019,15 @@ switch ($mode)
 
     "remove" {
     
-        if(-not [string]::IsNullOrEmpty($mainMasterNode) -and -not [string]::IsNullOrEmpty($configPath) ){
-        Write-host -f yellow "WARNING: This will remove all nodes  in the specified configuration file from the cluster apart from the master node"
-                remove-Nodes $mainMasterNode $configPath
-         }elseif(-not [string]::IsNullOrEmpty($masterNode) -and  [string]::IsNullOrEmpty($configPath) ){
-                Write-host -f yellow "WARNING: This will remove all nodes in the default configuration file from the cluster apart from the master node"
-                 remove-Nodes $mainMasterNode
+        if(-not [string]::IsNullOrEmpty($mainMasterNode)  ){
+
+            if( -not [string]::IsNullOrEmpty($configPath)){
+                 Write-host -f yellow "WARNING: This will remove all nodes  in the specified configuration file from the cluster apart from the master node"
+                    remove-Nodes -masterNode $mainMasterNode -configPath $configPath
+             }elseif(-not [string]::IsNullOrEmpty($mainMasterNode) -and  [string]::IsNullOrWhiteSpace($configPath) ){
+                    Write-host -f yellow "WARNING: This will remove all nodes in the default configuration file from the cluster apart from the master node"
+                     remove-Nodes  -masterNode  $mainMasterNode
+             }
          }else{
          
            Write-host -f red "Please provide a master node "

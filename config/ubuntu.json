@@ -209,7 +209,7 @@
         "initialize_kube_master_01": [
             {
                 "order": 0,
-                "enabled": true,
+                "enabled": false,
                 "command": "sudo bash -c  \" echo 'KUBELET_EXTRA_ARGS=\\\"--cgroup-driver=systemd\\\"' >  /etc/default/kubelet\""
             },
             {
@@ -233,23 +233,18 @@
                 "order": 0,
                 "enabled": true,
                 "command": "sudo mkdir -p /etc/systemd/system/kubelet.service.d"
-            },
-            {
-                "order": 1,
-                "enabled": true,
-                "command": "sudo bash -c \"echo -e '[Service]\nEnvironment=\\\"KUBELET_EXTRA_ARGS=--fail-swap-on=false\\\"' >/etc/systemd/system/kubelet.service.d/10-kubeadm.conf\""
-            },
-            {
-                "order": 2,
-                "enabled": true,
-                "command": "sudo systemctl daemon-reload && sudo systemctl restart kubelet"
             }
         ],
         "initialize_kube_master_03": [
             {
                 "order": 0,
                 "enabled": true,
-                "command": "sudo kubeadm init --control-plane-endpoint={0} --apiserver-advertise-address={1} --upload-certs | tee /tmp/kubeadm_init.txt"
+                "command": "sudo rm -rf /etc/systemd/system/kubelet.service.d/10-kubeadm.conf"
+
+            },{
+                "order": 1,
+                "enabled": true,
+                "command": "sudo kubeadm init --control-plane-endpoint={0} --upload-certs | tee /tmp/kubeadm_init.txt"
             }
         ],
         "initialize_kube_master_03_a": [
@@ -335,7 +330,7 @@
             {
                 "order": 1,
                 "enabled": true,
-                "command": "sudo bash -c  'cp -f /tmp/subnet.env /run/flannel/'"
+                "command": "sudo cp -f /tmp/subnet.env /run/flannel/"
             }
         ],
         "kube_token_generate": [
